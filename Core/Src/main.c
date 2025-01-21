@@ -26,6 +26,11 @@
 #include "spi.h"
 #include "usart.h"
 #include "gpio.h"
+#include "MAX7129.h"
+#include "PCA9538A_I²C.h"
+#include "time.h"
+#include "stdlib.h"
+
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -34,13 +39,11 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef struct {
-  int x;
-  int y;
-} Point;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
+
 /* USER CODE BEGIN PD */
 #define MATRIX_SIZE 8
 
@@ -55,26 +58,21 @@ typedef struct {
 
 /* USER CODE BEGIN PV */
 
-I2C_HandleTypeDef hi2c1;
-
-UART_HandleTypeDef huart2;
 Point snake[64]; // Maximum length of the snake
 int snake_length = 3; // Initial length of the snake
-Point direction = {1, 0}; // Initial direction (moving right)
+Point direction = {0, 0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void clearMatrix(void);
-void setLED(int x, int y, int state);
 void initSnake(void);
 void updateDirection(void);
 void moveSnake(void);
 void updateLEDMatrix(void);
 void playSnake(void);
-static void MX_USART2_UART_Init(void);
-static void MX_I2C1_Init(void);
+//static void MX_USART2_UART_Init(void);
+//static void MX_I2C1_Init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -124,7 +122,7 @@ int main(void)
   {
 	  //HAL_I2C_Master_Transmit(&hi2c, DevAddress, &pData, Size, Timeout);
 	  //HAL_I2C_Master_Receive(&hi2c, DevAddress, &pData, Size, Timeout);
-	  Send_Command_To_PCA9538A(0x00);
+	 // Send_Command_To_PCA9538A(0x00);
 	  playSnake();
 	  HAL_Delay(500);
     /* USER CODE END WHILE */
@@ -196,18 +194,6 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
-/**
-  * @brief  Clears the LED matrix.
-  * @retval None
-  */
-void clearMatrix(void) {
-  for (int i = 1; i <= 8; i++) {
-    uint8_t clearData[2] = {i, 0x00};
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET); // NSS low
-    HAL_SPI_Transmit(&hspi1, clearData, 2, HAL_MAX_DELAY);
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET); // NSS high
-  }
-}
 
 
 /**
@@ -229,36 +215,6 @@ void playSnake(void)
 }
 
 /**
-  * @brief  Sets the state of an LED in the matrix.
-  * @param  x: X coordinate of the LED
-  * @param  y: Y coordinate of the LED
-  * @param  state: State of the LED (1 for on, 0 for off)
-  * @retval None
-  */
-
-void setLED(int x, int y, int state) {
-	  if (x < 0 || x >= 8 || y < 0 || y >= 8) return; // Out of bounds
-
-	  uint8_t row = y + 1;
-	  uint8_t colData = 1 << x;
-
-	  uint8_t currentData[2] = {row, 0x00};
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET); // NSS low
-	  HAL_SPI_Receive(&hspi1, currentData, 2, HAL_MAX_DELAY);
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET); // NSS high
-
-	  if (state) {
-	    currentData[1] |= colData;
-	  } else {
-	    currentData[1] &= ~colData;
-	  }
-
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET); // NSS low
-	  HAL_SPI_Transmit(&hspi1, currentData, 2, HAL_MAX_DELAY);
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET); // NSS high
-}
-
-/**
   * @brief  Initializes the snake game.
   * @retval None
   */
@@ -277,13 +233,7 @@ void initSnake() {
   */
 
 void updateDirection() {
-	  int dir = rand() % 4;
-	  switch (dir) {
-	    case 0: direction.x = 1; direction.y = 0; break; // Right
-	    case 1: direction.x = -1; direction.y = 0; break; // Left
-	    case 2: direction.x = 0; direction.y = 1; break; // Down
-	    case 3: direction.x = 0; direction.y = -1; break; // Up
-	  }
+	  updateDirectionWithJoystick();
 }
 
 // Documentation

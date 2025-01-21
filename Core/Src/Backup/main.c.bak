@@ -3,8 +3,12 @@
   ******************************************************************************
   * @file           : main.c
   * @brief          : Main program body
+  * @author         : 177013
+  * @date		    : 19-01-2025
   ******************************************************************************
   * @attention
+  * This program is designed to run on an STM32 microcontroller and makes use of
+  * peripherals such as SPI, I2C, UART & GPIO to interact with external components.
   *
   * Copyright (c) 2025 STMicroelectronics.
   * All rights reserved.
@@ -19,6 +23,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "i2c.h"
+#include "spi.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -29,11 +34,15 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+typedef struct {
+  int x;
+  int y;
+} Point;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define MATRIX_SIZE 8
 
 /* USER CODE END PD */
 
@@ -46,12 +55,26 @@
 
 /* USER CODE BEGIN PV */
 
+I2C_HandleTypeDef hi2c1;
+
+UART_HandleTypeDef huart2;
+Point snake[64]; // Maximum length of the snake
+int snake_length = 3; // Initial length of the snake
+Point direction = {1, 0}; // Initial direction (moving right)
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+void clearMatrix(void);
+void setLED(int x, int y, int state);
+void initSnake(void);
+void updateDirection(void);
+void moveSnake(void);
+void updateLEDMatrix(void);
+void playSnake(void);
+static void MX_USART2_UART_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -88,8 +111,9 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_USART2_UART_Init();
-  MX_I2C1_Init();
+ // MX_USART2_UART_Init();
+ // MX_I2C1_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -100,7 +124,9 @@ int main(void)
   {
 	  //HAL_I2C_Master_Transmit(&hi2c, DevAddress, &pData, Size, Timeout);
 	  //HAL_I2C_Master_Receive(&hi2c, DevAddress, &pData, Size, Timeout);
-	  Send_Command_To_PCA9538A(0x00);
+	 // Send_Command_To_PCA9538A(0x00);
+	  playSnake();
+	  HAL_Delay(500);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -170,6 +196,138 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
+/**
+  * @brief  Clears the LED matrix.
+  * @retval None
+  */
+void clearMatrix(void) {
+  for (int i = 1; i <= 8; i++) {
+    uint8_t clearData[2] = {i, 0x00};
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET); // NSS low
+    HAL_SPI_Transmit(&hspi1, clearData, 2, HAL_MAX_DELAY);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET); // NSS high
+  }
+}
+
+
+/**
+  * @brief  Plays the snake game.
+  * @retval None
+  */
+void playSnake(void)
+{
+	  static int initialized = 0;
+	  if (!initialized) {
+	    srand(time(NULL));
+	    initSnake();
+	    initialized = 1;
+	  }
+
+	  updateDirection();
+	  moveSnake();
+	  updateLEDMatrix();
+}
+
+/**
+  * @brief  Sets the state of an LED in the matrix.
+  * @param  x: X coordinate of the LED
+  * @param  y: Y coordinate of the LED
+  * @param  state: State of the LED (1 for on, 0 for off)
+  * @retval None
+  */
+
+void setLED(int x, int y, int state) {
+	  if (x < 0 || x >= 8 || y < 0 || y >= 8) return; // Out of bounds
+
+	  uint8_t row = y + 1;
+	  uint8_t colData = 1 << x;
+
+	  uint8_t currentData[2] = {row, 0x00};
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET); // NSS low
+	  HAL_SPI_Receive(&hspi1, currentData, 2, HAL_MAX_DELAY);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET); // NSS high
+
+	  if (state) {
+	    currentData[1] |= colData;
+	  } else {
+	    currentData[1] &= ~colData;
+	  }
+
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET); // NSS low
+	  HAL_SPI_Transmit(&hspi1, currentData, 2, HAL_MAX_DELAY);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET); // NSS high
+}
+
+/**
+  * @brief  Initializes the snake game.
+  * @retval None
+  */
+void initSnake() {
+	  snake[0].x = 3;
+	  snake[0].y = 3;
+	  snake[1].x = 2;
+	  snake[1].y = 3;
+	  snake[2].x = 1;
+	  snake[2].y = 3;
+}
+
+/**
+  * @brief  Updates the direction of the snake.
+  * @retval None
+  */
+
+void updateDirection() {
+	  int dir = rand() % 4;
+	  switch (dir) {
+	    case 0: direction.x = 1; direction.y = 0; break; // Right
+	    case 1: direction.x = -1; direction.y = 0; break; // Left
+	    case 2: direction.x = 0; direction.y = 1; break; // Down
+	    case 3: direction.x = 0; direction.y = -1; break; // Up
+	  }
+}
+
+// Documentation
+
+/**
+  * @brief  Moves the snake in the current direction.
+  * @retval None
+  */
+
+void moveSnake() {
+	for (int i = snake_length - 1; i > 0; i--) {
+	    snake[i] = snake[i - 1];
+	  }
+	  snake[0].x += direction.x;
+	  snake[0].y += direction.y;
+
+	  if (snake[0].x >= MATRIX_SIZE) snake[0].x = 0;
+	  if (snake[0].x < 0) snake[0].x = MATRIX_SIZE - 1;
+	  if (snake[0].y >= MATRIX_SIZE) snake[0].y = 0;
+	  if (snake[0].y < 0) snake[0].y = MATRIX_SIZE - 1;
+}
+
+/**
+  * @brief  Updates the LED matrix to reflect the current state of the snake.
+  * @retval None
+  */
+
+void updateLEDMatrix() {
+	  clearMatrix();
+	  for (int i = 0; i < snake_length; i++) {
+	    setLED(snake[i].x, snake[i].y, 1);
+	  }
+}
+
+
+void playTowerBloxx(void)
+{
+  // Implement automated block dropping for Tower Bloxx
+}
+
+void playTetris(void)
+{
+  // Implement automated movements and rotations for Tetris
+}
 /* USER CODE END 4 */
 
 /**

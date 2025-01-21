@@ -1,46 +1,60 @@
+//#include "PCA9538A_I²C.h"
+//#include "main.h"
+
+
 #include "PCA9538A_I²C.h"
 #include "main.h"
+#include "i2c.h"
+#include "gpio.h"
+#include "usart.h"
+#include "spi.h"
+#include "stdint.h"
 
-// Function to send the command byte to the PCA9538A
-void Send_Command_To_PCA9538A(uint8_t commandByte) {
-    uint8_t pData[1];  // Buffer for the command byte
 
-    pData[0] = commandByte;  // Put the command byte in the buffer
+typedef struct {
+    int x;
+    int y;
+} Direction;
 
-    uint16_t DevAddress = 0x70;  // 7-bit address of the PCA9538A
+// Declare the direction variable
+Direction direction1 = {0, 0};
 
-    // Timeout value in milliseconds (you can adjust it)
-    uint32_t Timeout = 100;
+JoystickState readJoystick() {
+    JoystickState state = {0, 0, 0};
+    uint8_t buffer[3]; // Example: 3 bytes for X, Y, and button state
 
-    // Send the command byte to the PCA9538A via I2C
-    HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(&hi2c1, DevAddress<<1, pData, sizeof(pData), Timeout);
-
+    // Read joystick data from I2C
+    HAL_StatusTypeDef status = HAL_I2C_Master_Receive(&hi2c1, JOYSTICK_I2C_ADDR, buffer, 3, HAL_MAX_DELAY);
     if (status == HAL_OK) {
-        // Data was successfully transmitted
-        printf("Command byte sent successfully.\n");
+        state.x = buffer[0];      // X-axis position
+        state.y = buffer[1];      // Y-axis position
+        state.button = buffer[2]; // Button state (if available)
     } else {
-        // Error handling
-        printf("I2C transmission error.\n");
+        // Handle I2C read error
+    }
+    return state;
+}
+
+void updateDirectionWithJoystick() {
+    JoystickState joystick = readJoystick();
+
+    // Threshold values to detect meaningful movement (tune as necessary)
+    int threshold = 20;
+
+    if (joystick.x > threshold) {
+        direction1.x = 1; direction1.y = 0; // Right
+    } else if (joystick.x < -threshold) {
+        direction1.x = -1; direction1.y = 0; // Left
+    } else if (joystick.y > threshold) {
+        direction1.x = 0; direction1.y = 1; // Down
+    } else if (joystick.y < -threshold) {
+        direction1.x = 0; direction1.y = -1; // Up
     }
 }
 
-void Set_Output_Port(uint8_t outputData) {
-    uint8_t pData[1];
 
-    pData[0] = outputData;  // Data to write to output port
 
-    uint16_t DevAddress = 0x70;  // 7-bit address of the PCA9538A
 
-    uint32_t Timeout = 100;
 
-    // First, send the command byte (0x01 for Output Port Register)
-    HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(&hi2c1, DevAddress<<1, &pData[0], 1, Timeout);
 
-    if (status == HAL_OK) {
-        // Data was successfully written
-        printf("Output port data sent successfully.\n");
-    } else {
-        // Error handling
-        printf("I2C transmission error.\n");
-    }
-}
+

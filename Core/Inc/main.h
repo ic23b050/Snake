@@ -29,6 +29,7 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "stm32l4xx_hal.h"
 
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -41,7 +42,11 @@ extern "C" {
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
-
+typedef struct {
+    int x;
+    int y;
+} Point;
+extern Point direction; // Declare direction here
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
