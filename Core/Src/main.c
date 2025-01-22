@@ -26,15 +26,12 @@
 #include "spi.h"
 #include "usart.h"
 #include "gpio.h"
-#include "MAX7129.h"
-#include "PCA9538A_I²C.h"
-#include "time.h"
-#include "stdlib.h"
-
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "MAX7129.h"
+#include "PCA9538A_I²C.h"
+#include "snakelogic.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,10 +40,7 @@
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
-
 /* USER CODE BEGIN PD */
-#define MATRIX_SIZE 8
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -57,20 +51,14 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+int selectedMenuIndex = 0;
 
-Point snake[64]; // Maximum length of the snake
-int snake_length = 3; // Initial length of the snake
-Point direction = {0, 0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void initSnake(void);
-void updateDirection(void);
-void moveSnake(void);
-void updateLEDMatrix(void);
-void playSnake(void);
+
 //static void MX_USART2_UART_Init(void);
 //static void MX_I2C1_Init(void);
 /* USER CODE END PFP */
@@ -113,18 +101,54 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-
+  uint32_t lastInputTime = HAL_GetTick();  // Store the current time to track the last input time
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  //HAL_I2C_Master_Transmit(&hi2c, DevAddress, &pData, Size, Timeout);
-	  //HAL_I2C_Master_Receive(&hi2c, DevAddress, &pData, Size, Timeout);
-	 // Send_Command_To_PCA9538A(0x00);
-	  playSnake();
-	  HAL_Delay(500);
+      JoystickState joystick = readJoystick();  // Read the joystick input
+
+      // Check if the joystick or button was moved or pressed
+      if (joystick.x || joystick.y || joystick.button) {
+          lastInputTime = HAL_GetTick();  // Update the last input time when a joystick movement or button press occurs
+
+          // Switch between menu items based on joystick's Y-axis movement
+          switch (joystick.y) {
+              case 1:
+                  // Move down in the menu (increase selected index)
+                  selectedMenuIndex = (selectedMenuIndex + 1) % MENU_ITEMS;
+                  break;
+              case -1:
+                  // Move up in the menu (decrease selected index)
+                  selectedMenuIndex = (selectedMenuIndex - 1 + MENU_ITEMS) % MENU_ITEMS;
+                  break;
+          }
+
+          // Execute an action based on the selected menu item when the button is pressed
+          if (joystick.button) {
+              switch (selectedMenuIndex) {
+                  case 0:
+                      playSnake();  // Start the Snake game
+                      break;
+                  case 1:
+                      playTowerBloxx();  // Start the Tower Bloxx game
+                      break;
+                  case 2:
+                      clearMatrix();  // Clear the LED matrix (could be a "Quit" or "Exit" option)
+                      break;
+              }
+          }
+
+          // Update the menu display based on the selected option
+          showMenu();
+      }
+
+      // Check for inactivity (if no input for 30 seconds)
+      if (HAL_GetTick() - lastInputTime > 30000) {
+          handleInactivity();  // Handle inactivity by dimming the display and showing the menu
+      }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -193,86 +217,6 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
-
-
-/**
-  * @brief  Plays the snake game.
-  * @retval None
-  */
-void playSnake(void)
-{
-	  static int initialized = 0;
-	  if (!initialized) {
-	    srand(time(NULL));
-	    initSnake();
-	    initialized = 1;
-	  }
-
-	  updateDirection();
-	  moveSnake();
-	  updateLEDMatrix();
-}
-
-/**
-  * @brief  Initializes the snake game.
-  * @retval None
-  */
-void initSnake() {
-	  snake[0].x = 3;
-	  snake[0].y = 3;
-	  snake[1].x = 2;
-	  snake[1].y = 3;
-	  snake[2].x = 1;
-	  snake[2].y = 3;
-}
-
-/**
-  * @brief  Updates the direction of the snake.
-  * @retval None
-  */
-
-void updateDirection() {
-	  updateDirectionWithJoystick();
-}
-
-// Documentation
-
-/**
-  * @brief  Moves the snake in the current direction.
-  * @retval None
-  */
-
-void moveSnake() {
-	for (int i = snake_length - 1; i > 0; i--) {
-	    snake[i] = snake[i - 1];
-	  }
-	  snake[0].x += direction.x;
-	  snake[0].y += direction.y;
-
-	  if (snake[0].x >= MATRIX_SIZE) snake[0].x = 0;
-	  if (snake[0].x < 0) snake[0].x = MATRIX_SIZE - 1;
-	  if (snake[0].y >= MATRIX_SIZE) snake[0].y = 0;
-	  if (snake[0].y < 0) snake[0].y = MATRIX_SIZE - 1;
-}
-
-/**
-  * @brief  Updates the LED matrix to reflect the current state of the snake.
-  * @retval None
-  */
-
-void updateLEDMatrix() {
-	  clearMatrix();
-	  for (int i = 0; i < snake_length; i++) {
-	    setLED(snake[i].x, snake[i].y, 1);
-	  }
-}
-
-
-void playTowerBloxx(void)
-{
-  // Implement automated block dropping for Tower Bloxx
-}
 
 void playTetris(void)
 {
